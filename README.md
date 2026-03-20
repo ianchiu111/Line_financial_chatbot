@@ -6,9 +6,13 @@ This project conducts a Line Chatbot to solve users' financial questions.
 
 ### Currency
 1. Real-time currency exchange rate
+2. Bank rate comparasion
 
 ### Stock
 --- Preparing ---
+
+### Present
+<img src="images/present.png" alt="image" width="300"/>
 
 
 ## Activate the chatbot
