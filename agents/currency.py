@@ -1,12 +1,14 @@
 
 import os, json, re
-from typing import Dict, Any
+from typing import List, Dict, Any
 
 import yfinance as yf
+import requests
+from bs4 import BeautifulSoup
 from langchain_core.messages import HumanMessage
 from langchain_openai import AzureChatOpenAI
 from langgraph.types import Command
-from utils.openai_api_helper import LLMClient
+from utils.AI_utils.openai_api_helper import LLMClient
 from agents.base import BaseAgent
 
 class CurrencyAgent(BaseAgent):
@@ -39,7 +41,7 @@ class CurrencyAgent(BaseAgent):
                 print(f"無法找到 json object, Origin Content: {text}")
                 return {}
 
-    def fetch_exchange_rate(self, from_currency: str, to_currency: str) -> dict | None:
+    def fetch_exchange_rate(self, from_currency: str, to_currency: str) -> str:
         """
         Fetch exchange rate between any two currencies.
         
@@ -84,26 +86,87 @@ class CurrencyAgent(BaseAgent):
         print("Currency response:", exchange_rate_info)
 
 
-        return {
-            "from": from_currency,
-            "to": to_currency,
-            "rate": rate,                       
-            "exchange_rate_info": exchange_rate_info     
+        return exchange_rate_info     
+
+    def fetch_taiwan_bank_rates(self, target_currency: str) -> str:
+        """
+        compare different banks
+        url: https://www.fintechgo.com.tw/FinInfo/ForexRate/BankRealExRate/Currency/USD
+        """        
+    
+        url = f"https://www.fintechgo.com.tw/FinInfo/ForexRate/BankRealExRate/Currency/{target_currency}"
+        headers = {
+            "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36"
         }
+        
+        response = requests.get(url, headers=headers, timeout=15)
+        response.raise_for_status()
+        soup = BeautifulSoup(response.text, "html.parser")
+        
+        rows = soup.find_all("div", class_="cc-div-table-row")
+
+        print("aaaaaaaaa", rows)
+        
+        taiwan_bank_rates: List[Dict[str, Any]] = []
+        for row in rows[1:]:  # Skip header row
+            cells = row.find_all("div", class_="cc-div-table-cell")
+            if len(cells) < 5:
+                continue
+            
+            # Bank name (remove code like "(004)")
+            bank_name = cells[0].get_text(strip=True)
+            
+            # Get rate values — each cell has inner spans
+            def get_rate(cell):
+                spans = cell.find_all("span", style=lambda s: s and "table-cell" in s)
+                # Second span has the actual number
+                for span in spans:
+                    text = span.get_text(strip=True)
+                    if text and text != "👍":
+                        return text
+                return "--"
+            
+            spot_buy  = get_rate(cells[1])
+            spot_sell = get_rate(cells[2])
+            cash_buy  = get_rate(cells[3])
+            cash_sell = get_rate(cells[4])
+            
+            taiwan_bank_rates.append({
+                "bank": bank_name,      # bank name
+                "spot_buy": spot_buy,   # 即期匯率(買入)
+                "spot_sell": spot_sell, # 即期匯率(賣出)
+                "cash_buy": cash_buy,   # 現金匯率(買入)
+                "cash_sell": cash_sell, # 現金匯率(賣出)
+            })
+
+        return taiwan_bank_rates
 
     def run(self, state: Dict[str, Any]) -> Command:
-        """
-        暫時不需要 Agent 介入
-        """
         print(">>>>Currency Working<<<<")
+        
+        from_currency = state.get("_FROM_currency", "")
+        to_currency = state.get("_TO_currency", "")
+        
+        SUPPORTED_CURRENCIES = [
+            "TWD", "USD", "EUR", "JPY", "GBP", "AUD",
+            "CAD", "HKD", "CNY", "NZD", "ZAR",
+        ]
 
-        exchange_rate = self.fetch_exchange_rate(
-            from_currency = state.get("_FROM_currency", ""),
-            to_currency = state.get("_TO_currency", "")
-        )
+        # Use Taiwan bank rates if converting to TWD
+        if "TWD" in (from_currency, to_currency):
+            if from_currency in SUPPORTED_CURRENCIES and to_currency.upper() in SUPPORTED_CURRENCIES:
+                if from_currency == "TWD":
+                    target_currency = to_currency
+                else:
+                    target_currency = from_currency
 
+                taiwan_bank_rates = self.fetch_taiwan_bank_rates(target_currency=target_currency)
+
+        exchange_rate_info = self.fetch_exchange_rate(from_currency, to_currency)
+        
         update = {
-            "exchange_rate_info": exchange_rate.get("exchange_rate_info", "")
+            "exchange_rate_info": exchange_rate_info,
+            "taiwan_bank_rates": taiwan_bank_rates
         }
         return Command(update=update)
     

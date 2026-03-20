@@ -4,7 +4,8 @@ import pandas as pd
 import pytz
 import logging
 import traceback
-from datetime import datetime
+from datetime import datetime, timezone
+from utils.CSS.flex_bank_table import build_bank_rate_table
 from typing import Dict, Any, Optional
 from pathlib import Path
 from graph import run_agent
@@ -109,22 +110,37 @@ def handle_message(event):
     """Handle incoming text messages from LINE users"""
     user_message = event.message.text
     logger.info(f"User message: {user_message}")
-
+ 
     try:
-        # Send user message to your finance agent
-        agent_response = run_agent(query=user_message)
+        agent_response, taiwan_bank_rates, _FROM_currency, _TO_currency = run_agent(query=user_message)
     except Exception as e:
         logger.error(f"Agent error: {e}")
         logger.error(traceback.format_exc())
-        agent_response = "Sorry, something went wrong. Please try again later."
+ 
+    # ── Build message list ────────────────────────────────────────────────────
+    messages = [TextMessage(text=str(agent_response))]   # always include text
+ 
+    if taiwan_bank_rates != []:                          # append table if data exists
 
-    # Reply back to LINE user
+        messages.append(
+            build_bank_rate_table(
+                rates = taiwan_bank_rates, 
+                _FROM_currency = _FROM_currency,
+                _TO_currency = _TO_currency, 
+                updated = current_time_taiwan.strftime("%Y-%m/%d-%H:%M")
+            )
+        )
+ 
+    # Line allows max 5 messages per reply
+    messages = messages[:5]
+ 
+    # ── Reply ─────────────────────────────────────────────────────────────────
     with ApiClient(configuration) as api_client:
         line_bot_api = MessagingApi(api_client)
         line_bot_api.reply_message_with_http_info(
             ReplyMessageRequest(
                 reply_token=event.reply_token,
-                messages=[TextMessage(text=str(agent_response))]
+                messages=messages,
             )
         )
 
@@ -148,10 +164,10 @@ def ask_agent():
                 )
             )
         
-        response = run_agent(query = query)
+        response, taiwan_bank_rates = run_agent(query = query)
         return jsonify(
             APIResponse.success(
-                message=response,
+                message=(taiwan_bank_rates, response),
             )
         )
     except Exception as e:
