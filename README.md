@@ -44,3 +44,5 @@ ngrok http 5001
     - Manage bot responses & settings
 - [Line Developer](https://developers.line.biz/console/)
     - Webhook & API key settings
+- Other resources
+    - [理財鴿：銀行即時匯率](https://www.fintechgo.com.tw/FinInfo/ForexRate/BankRealExRate/Currency/USD)
