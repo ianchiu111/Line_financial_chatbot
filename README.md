@@ -38,11 +38,15 @@ ngrok http 5001
 - [pyhton-to-linebot](https://pypi.org/project/line-bot-sdk/)
 
 ## Websites / Services
-- [ngrok](https://ngrok.com)
-    - Free HTTPS tunnel for local development
 - [Line Official Account Manager](https://manager.line.biz/account/@156qcdrh/setting/response)
     - Manage bot responses & settings
 - [Line Developer](https://developers.line.biz/console/)
     - Webhook & API key settings
+- [ngrok](https://ngrok.com)
+    - Free HTTPS tunnel for **local deployment**
+- [Render](https://dashboard.render.com)
+    - For **cloud deployment**
+    - ⭐️ Need to write **`.python-versioin`** to delpoy with setting python version
+- [Gunicorn (Green Unicorn)](https://gunicorn.org)
 - Other resources
     - [理財鴿：銀行即時匯率](https://www.fintechgo.com.tw/FinInfo/ForexRate/BankRealExRate/Currency/USD)
