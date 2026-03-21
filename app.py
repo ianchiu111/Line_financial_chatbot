@@ -111,30 +111,54 @@ def handle_message(event):
     user_message = event.message.text
     logger.info(f"User message: {user_message}")
  
+    # ── Agent Response ────────────────────────────────────────────────────
     try:
         agent_response, taiwan_bank_rates, _FROM_currency, _TO_currency = run_agent(query=user_message)
+        messages = [TextMessage(text=str(agent_response))]
+
     except Exception as e:
         logger.error(f"Agent error: {e}")
         logger.error(traceback.format_exc())
- 
-    # ── Build message list ────────────────────────────────────────────────────
-    messages = [TextMessage(text=str(agent_response))]   # always include text
- 
-    if taiwan_bank_rates != []:                          # append table if data exists
 
-        messages.append(
-            build_bank_rate_table(
+        with ApiClient(configuration) as api_client:
+            line_bot_api = MessagingApi(api_client)
+            line_bot_api.reply_message_with_http_info(
+                ReplyMessageRequest(
+                    reply_token=event.reply_token,
+                    messages=[TextMessage(text="Sorry, agent response went wrong. Please access our engineer.")]
+                )
+            )
+        return
+ 
+    # ── Rate Table Response ────────────────────────────────────────────────────
+    if taiwan_bank_rates != []:            
+
+        try:
+            taiwan_bank_rates_table = build_bank_rate_table(
                 rates = taiwan_bank_rates, 
                 _FROM_currency = _FROM_currency,
                 _TO_currency = _TO_currency, 
                 updated = current_time_taiwan.strftime("%Y-%m/%d-%H:%M")
             )
-        )
- 
-    # Line allows max 5 messages per reply
-    messages = messages[:5]
+            messages.append(taiwan_bank_rates_table)
+        except Exception as e:
+            logger.error(f"Table error: {e}")
+            logger.error(traceback.format_exc())
+
+        with ApiClient(configuration) as api_client:
+            line_bot_api = MessagingApi(api_client)
+            line_bot_api.reply_message_with_http_info(
+                ReplyMessageRequest(
+                    reply_token=event.reply_token,
+                    messages=[TextMessage(text="Sorry, table building went wrong. Please access our engineer.")]
+                )
+            )
+        return
  
     # ── Reply ─────────────────────────────────────────────────────────────────
+    # Line allows max 5 messages per reply
+    messages = messages[:5]
+
     with ApiClient(configuration) as api_client:
         line_bot_api = MessagingApi(api_client)
         line_bot_api.reply_message_with_http_info(
