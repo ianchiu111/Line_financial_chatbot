@@ -1,14 +1,13 @@
 
-import os, json, re
+import json, re
 from typing import List, Dict, Any
 
 import yfinance as yf
-import requests
+# import requests
+from curl_cffi import requests
 from bs4 import BeautifulSoup
 from langchain_core.messages import HumanMessage
-from langchain_openai import AzureChatOpenAI
 from langgraph.types import Command
-from utils.AI_utils.openai_api_helper import LLMClient
 from agents.base import BaseAgent
 
 class CurrencyAgent(BaseAgent):
@@ -95,17 +94,23 @@ class CurrencyAgent(BaseAgent):
         """        
     
         url = f"https://www.fintechgo.com.tw/FinInfo/ForexRate/BankRealExRate/Currency/{target_currency}"
-        headers = {
-            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-            "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
-            "Accept-Language": "zh-TW,zh;q=0.9,en;q=0.8",
-            "Referer": "https://www.fintechgo.com.tw/",
-        }
+        # headers = {
+        #     "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+        #     "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+        #     "Accept-Language": "zh-TW,zh;q=0.9,en;q=0.8",
+        #     "Referer": "https://www.fintechgo.com.tw/",
+        # }
         
-        response = requests.get(url, headers=headers)
+        # response = requests.get(url, headers=headers)
+
+        response = requests.get(
+                url,
+                impersonate="chrome120",
+                timeout=15,
+            )
+
         response.raise_for_status()
         soup = BeautifulSoup(response.text, "html.parser")
-        
         rows = soup.find_all("div", class_="cc-div-table-row")
 
         print("aaaaaaaaa", rows)

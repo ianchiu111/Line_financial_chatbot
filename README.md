@@ -50,3 +50,4 @@ ngrok http 5001
 - [Gunicorn (Green Unicorn)](https://gunicorn.org)
 - Other resources
     - [理財鴿：銀行即時匯率](https://www.fintechgo.com.tw/FinInfo/ForexRate/BankRealExRate/Currency/USD)
+        - Deploy in **local** is available, but when in **render** is unavailable. → `IP Address Issue` 
