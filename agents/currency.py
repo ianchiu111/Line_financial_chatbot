@@ -88,60 +88,150 @@ class CurrencyAgent(BaseAgent):
 
         return exchange_rate_info     
 
-    def fetch_taiwan_bank_rates(self, target_currency: str) -> str:
-        """
-        compare different banks
-        url: https://www.fintechgo.com.tw/FinInfo/ForexRate/BankRealExRate/Currency/USD
-        """        
+    # def fetch_taiwan_bank_rates(self, target_currency: str) -> str:
+    #     """
+    #     compare different banks
+    #     url: https://www.fintechgo.com.tw/FinInfo/ForexRate/BankRealExRate/Currency/USD
+    #     """        
     
-        url = f"https://www.fintechgo.com.tw/FinInfo/ForexRate/BankRealExRate/Currency/{target_currency}"
-        headers = {
-            'User-Agent': 'Mozilla/5.0'
-        }
+    #     url = f"https://www.fintechgo.com.tw/FinInfo/ForexRate/BankRealExRate/Currency/{target_currency}"
+    #     headers = {
+    #         'User-Agent': 'Mozilla/5.0'
+    #     }
         
-        response = requests.get(url, headers=headers)
+    #     response = requests.get(url, headers=headers)
   
-        # response = Request(url, headers={'User-Agent': 'Mozilla/5.0'}) 
+    #     # response = Request(url, headers={'User-Agent': 'Mozilla/5.0'}) 
 
-        response.raise_for_status()
+    #     response.raise_for_status()
+    #     soup = BeautifulSoup(response.text, "html.parser")
+    #     rows = soup.find_all("div", class_="cc-div-table-row")
+
+    #     print("aaaaaaaaa", rows)
+        
+    #     taiwan_bank_rates: List[Dict[str, Any]] = []
+    #     for row in rows[1:]:  # Skip header row
+    #         cells = row.find_all("div", class_="cc-div-table-cell")
+    #         if len(cells) < 5:
+    #             continue
+            
+    #         # Bank name (remove code like "(004)")
+    #         bank_name = cells[0].get_text(strip=True)
+            
+    #         # Get rate values — each cell has inner spans
+    #         def get_rate(cell):
+    #             spans = cell.find_all("span", style=lambda s: s and "table-cell" in s)
+    #             # Second span has the actual number
+    #             for span in spans:
+    #                 text = span.get_text(strip=True)
+    #                 if text and text != "👍":
+    #                     return text
+    #             return "--"
+            
+    #         spot_buy  = get_rate(cells[1])
+    #         spot_sell = get_rate(cells[2])
+    #         cash_buy  = get_rate(cells[3])
+    #         cash_sell = get_rate(cells[4])
+            
+    #         taiwan_bank_rates.append({
+    #             "bank": bank_name,      # bank name
+    #             "spot_buy": spot_buy,   # 即期匯率(買入)
+    #             "spot_sell": spot_sell, # 即期匯率(賣出)
+    #             "cash_buy": cash_buy,   # 現金匯率(買入)
+    #             "cash_sell": cash_sell, # 現金匯率(賣出)
+    #         })
+
+    #     return taiwan_bank_rates
+
+    def fetch_taiwan_bank_rates(self, target_currency: str) -> list[dict]:
+        """
+        Compare different banks from fintechgo only.
+        Keep the same URL. Do not use other sources.
+        """
+
+        import time
+        import random
+        import requests
+        from bs4 import BeautifulSoup
+        from typing import List, Dict, Any
+
+        url = f"https://www.fintechgo.com.tw/FinInfo/ForexRate/BankRealExRate/Currency/{target_currency}"
+
+        session = requests.Session()
+        session.headers.update({
+            "User-Agent": (
+                "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
+                "AppleWebKit/537.36 (KHTML, like Gecko) "
+                "Chrome/123.0.0.0 Safari/537.36"
+            ),
+            "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8",
+            "Accept-Language": "zh-TW,zh;q=0.9,en-US;q=0.8,en;q=0.7",
+            "Cache-Control": "no-cache",
+            "Pragma": "no-cache",
+            "Upgrade-Insecure-Requests": "1",
+            "Referer": "https://www.fintechgo.com.tw/",
+            "Connection": "keep-alive",
+        })
+
+        response = None
+        last_error = None
+
+        for attempt in range(3):
+            try:
+                response = session.get(
+                    url,
+                    timeout=15,
+                    allow_redirects=True,
+                )
+
+                if response.status_code == 200:
+                    break
+
+                last_error = RuntimeError(
+                    f"fintechgo returned status={response.status_code} for {url}"
+                )
+
+                # small backoff
+                time.sleep(1.5 + random.random())
+
+            except requests.RequestException as e:
+                last_error = e
+                time.sleep(1.5 + random.random())
+        else:
+            print(f"[fetch_taiwan_bank_rates] request failed: {last_error}")
+            return []
+
         soup = BeautifulSoup(response.text, "html.parser")
         rows = soup.find_all("div", class_="cc-div-table-row")
 
-        print("aaaaaaaaa", rows)
-        
         taiwan_bank_rates: List[Dict[str, Any]] = []
-        for row in rows[1:]:  # Skip header row
+
+        def get_rate(cell):
+            spans = cell.find_all("span")
+            for span in spans:
+                text = span.get_text(strip=True)
+                if text and text != "👍":
+                    return text
+            raw = cell.get_text(" ", strip=True)
+            return raw if raw else "--"
+
+        for row in rows[1:]:
             cells = row.find_all("div", class_="cc-div-table-cell")
             if len(cells) < 5:
                 continue
-            
-            # Bank name (remove code like "(004)")
+
             bank_name = cells[0].get_text(strip=True)
-            
-            # Get rate values — each cell has inner spans
-            def get_rate(cell):
-                spans = cell.find_all("span", style=lambda s: s and "table-cell" in s)
-                # Second span has the actual number
-                for span in spans:
-                    text = span.get_text(strip=True)
-                    if text and text != "👍":
-                        return text
-                return "--"
-            
-            spot_buy  = get_rate(cells[1])
-            spot_sell = get_rate(cells[2])
-            cash_buy  = get_rate(cells[3])
-            cash_sell = get_rate(cells[4])
-            
+
             taiwan_bank_rates.append({
-                "bank": bank_name,      # bank name
-                "spot_buy": spot_buy,   # 即期匯率(買入)
-                "spot_sell": spot_sell, # 即期匯率(賣出)
-                "cash_buy": cash_buy,   # 現金匯率(買入)
-                "cash_sell": cash_sell, # 現金匯率(賣出)
+                "bank": bank_name,
+                "spot_buy": get_rate(cells[1]),
+                "spot_sell": get_rate(cells[2]),
+                "cash_buy": get_rate(cells[3]),
+                "cash_sell": get_rate(cells[4]),
             })
 
         return taiwan_bank_rates
+
 
     def run(self, state: Dict[str, Any]) -> Command:
         print(">>>>Currency Working<<<<")
