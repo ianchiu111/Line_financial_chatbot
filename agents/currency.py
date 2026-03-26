@@ -4,12 +4,15 @@ from typing import List, Dict, Any
 
 import yfinance as yf
 import requests
-# from urllib.request import Request, urlopen
-# from curl_cffi import requests
+from curl_cffi import requests as cffi_requests
 from bs4 import BeautifulSoup
 from langchain_core.messages import HumanMessage
 from langgraph.types import Command
 from agents.base import BaseAgent
+
+# Browser profile used by curl_cffi to impersonate a real browser TLS fingerprint.
+# Update this string when a newer Chrome profile becomes available in curl_cffi.
+_IMPERSONATE_BROWSER = "chrome120"
 
 class CurrencyAgent(BaseAgent):
     def __init__(self, llm_client=None):
@@ -146,26 +149,8 @@ class CurrencyAgent(BaseAgent):
     def fetch_taiwan_bank_rates(self, target_currency: str) -> list[dict]:
         import time
         import random
-        import requests
-        from bs4 import BeautifulSoup
 
         url = f"https://www.fintechgo.com.tw/FinInfo/ForexRate/BankRealExRate/Currency/{target_currency}"
-
-        session = requests.Session()
-        session.headers.update({
-            "User-Agent": (
-                "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
-                "AppleWebKit/537.36 (KHTML, like Gecko) "
-                "Chrome/123.0.0.0 Safari/537.36"
-            ),
-            "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
-            "Accept-Language": "zh-TW,zh;q=0.9,en-US;q=0.8,en;q=0.7",
-            "Cache-Control": "no-cache",
-            "Pragma": "no-cache",
-            "Referer": "https://www.fintechgo.com.tw/",
-            "Upgrade-Insecure-Requests": "1",
-            "Connection": "keep-alive",
-        })
 
         response = None
         last_status = None
@@ -173,10 +158,12 @@ class CurrencyAgent(BaseAgent):
 
         for _ in range(3):
             try:
-                response = session.get(
+                # Use curl_cffi to impersonate a real Chrome browser TLS fingerprint,
+                # bypassing Cloudflare/WAF blocks that reject cloud-datacenter IPs.
+                response = cffi_requests.get(
                     url,
+                    impersonate=_IMPERSONATE_BROWSER,
                     timeout=15,
-                    allow_redirects=True,
                 )
 
                 last_status = response.status_code
@@ -186,14 +173,17 @@ class CurrencyAgent(BaseAgent):
 
                 time.sleep(1 + random.random())
 
-            except requests.RequestException as e:
+            except cffi_requests.RequestException as e:
                 last_error = e
                 time.sleep(1 + random.random())
         else:
             if last_error:
                 print(f"[fetch_taiwan_bank_rates] request exception: {last_error}")
             else:
-                print(f"[fetch_taiwan_bank_rates] request failed: status={last_status}, url={url}")
+                print(
+                    f"[fetch_taiwan_bank_rates] request failed: "
+                    f"fintechgo returned status={last_status} for {url}"
+                )
             return []
 
         soup = BeautifulSoup(response.text, "html.parser")
