@@ -67,6 +67,8 @@ def run_agent(query: str) -> None:
     result = agent_graph.invoke(init_state)
     response = result.get("response", "")
 
+    print("\n=== Final Response ===\n", result)
+
     return (
         response, 
         result.get("taiwan_bank_rates", []),

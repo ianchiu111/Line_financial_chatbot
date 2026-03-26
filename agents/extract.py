@@ -35,7 +35,6 @@ class ExtractAgent(BaseAgent):
         print(">>>>Extract Working<<<<")
         prompt = get_extractAgent_prompt(origin_query = state.get("origin_query", ""))
         response = self.llm.invoke([HumanMessage(content=prompt)])
-        print(f"response: {response}")
 
         content = self._safe_parse_json(response.content)
         _FROM_currency = content.get("_FROM_currency", "unknown")

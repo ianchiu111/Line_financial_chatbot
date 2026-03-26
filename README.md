@@ -15,16 +15,19 @@ This project conducts a Line Chatbot to solve users' financial questions.
 <img src="images/present.png" alt="image" width="300"/>
 
 
-## Activate the chatbot
+## Activate the chatbot in local
 1. Terminal 1 — Flask app:
 ```bash
 python app.py
 ```
-2. Terminal 2 — ngrok:
+2.Terminal 2 — ngrok:
 ```bash
 ngrok http 5001
 ```
-3. Check the server is running by **https://prisonlike-sarky-floyd.ngrok-free.dev/health**
+3. Check the server is running on **https://prisonlike-sarky-floyd.ngrok-free.dev/health**
+4. Setup Webhook URL setting in Line Developers
+`https://prisonlike-sarky-floyd.ngrok-free.dev/callback`
+
 
 
 # References

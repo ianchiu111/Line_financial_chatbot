@@ -39,7 +39,6 @@ class SummaryAgent(BaseAgent):
             exchange_rate_info = state.get("exchange_rate_info", ""),
         )
         response = self.llm.invoke([HumanMessage(content=prompt)])
-        print(f"response: {response}")
 
         # content = self._safe_parse_json(response.content)
         content = response.content
