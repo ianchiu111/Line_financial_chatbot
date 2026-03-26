@@ -112,78 +112,18 @@ class CurrencyAgent(BaseAgent):
 
         return exchange_rate_info     
 
-    # def fetch_taiwan_bank_rates(self, target_currency: str) -> str:
-    #     """
-    #     compare different banks
-    #     url: https://www.fintechgo.com.tw/FinInfo/ForexRate/BankRealExRate/Currency/USD
-    #     """        
-    
-    #     url = f"https://www.fintechgo.com.tw/FinInfo/ForexRate/BankRealExRate/Currency/{target_currency}"
-    #     headers = {
-    #         'User-Agent': 'Mozilla/5.0'
-    #     }
-        
-    #     response = requests.get(url, headers=headers)
-  
-    #     # response = Request(url, headers={'User-Agent': 'Mozilla/5.0'}) 
-
-    #     response.raise_for_status()
-    #     soup = BeautifulSoup(response.text, "html.parser")
-    #     rows = soup.find_all("div", class_="cc-div-table-row")
-
-    #     print("aaaaaaaaa", rows)
-        
-    #     taiwan_bank_rates: List[Dict[str, Any]] = []
-    #     for row in rows[1:]:  # Skip header row
-    #         cells = row.find_all("div", class_="cc-div-table-cell")
-    #         if len(cells) < 5:
-    #             continue
-            
-    #         # Bank name (remove code like "(004)")
-    #         bank_name = cells[0].get_text(strip=True)
-            
-    #         # Get rate values — each cell has inner spans
-    #         def get_rate(cell):
-    #             spans = cell.find_all("span", style=lambda s: s and "table-cell" in s)
-    #             # Second span has the actual number
-    #             for span in spans:
-    #                 text = span.get_text(strip=True)
-    #                 if text and text != "👍":
-    #                     return text
-    #             return "--"
-            
-    #         spot_buy  = get_rate(cells[1])
-    #         spot_sell = get_rate(cells[2])
-    #         cash_buy  = get_rate(cells[3])
-    #         cash_sell = get_rate(cells[4])
-            
-    #         taiwan_bank_rates.append({
-    #             "bank": bank_name,      # bank name
-    #             "spot_buy": spot_buy,   # 即期匯率(買入)
-    #             "spot_sell": spot_sell, # 即期匯率(賣出)
-    #             "cash_buy": cash_buy,   # 現金匯率(買入)
-    #             "cash_sell": cash_sell, # 現金匯率(賣出)
-    #         })
-
-    #     return taiwan_bank_rates
-
+    # ================= Functions to fetch bank rate comparison table information =================
     def fetch_taiwan_bank_rates(self, target_currency: str) -> list[dict]:
         """
-        Fetch multi-bank Taiwan exchange rates.
-
-        Tries fintechgo.com.tw first (richer, multi-bank data).  Falls back
-        to the official Bank of Taiwan CSV endpoint when fintechgo is
-        unreachable or returns a non-200 status (e.g. 403 from bot-detection).
+        Fetch multi-bank Taiwan exchange rates comparison.
         """
         rates = self._fetch_fintechgo_rates(target_currency)
-        if rates:
-            return rates
-
-        print("[fetch_taiwan_bank_rates] fintechgo unavailable, falling back to Bank of Taiwan")
-        return self._fetch_bot_rates(target_currency)
+        return rates
 
     def _fetch_fintechgo_rates(self, target_currency: str) -> list[dict]:
-        """Scrape real-time multi-bank rates from fintechgo.com.tw."""
+        """
+        Scrape real-time multi-bank rates from fintechgo.com.tw.
+        """
         url = f"https://www.fintechgo.com.tw/FinInfo/ForexRate/BankRealExRate/Currency/{target_currency}"
 
         headers = {
@@ -257,61 +197,6 @@ class CurrencyAgent(BaseAgent):
 
         return rates
 
-    def _fetch_bot_rates(self, target_currency: str) -> list[dict]:
-        """
-        Fallback: fetch today's rates from the Bank of Taiwan (台灣銀行) CSV endpoint.
-
-        URL: https://rate.bot.com.tw/xrt/flcsv/0/day
-        CSV columns (after the header row):
-            幣別, 現金匯率買入, 現金匯率賣出, 即期匯率買入, 即期匯率賣出, ...
-        Currency cells are in the form ``USD(美金)`` / ``JPY(日圓)``.
-        Returns a list with a single dict on success, or an empty list on failure.
-        """
-        url = "https://rate.bot.com.tw/xrt/flcsv/0/day"
-
-        headers = {
-            **_BROWSER_HEADERS,
-            "Referer": "https://rate.bot.com.tw/",
-        }
-
-        try:
-            response = cffi_requests.get(
-                url,
-                headers=headers,
-                impersonate=_IMPERSONATE_BROWSER,
-                timeout=15,
-            )
-            if response.status_code != 200:
-                print(f"[fetch_bot_rates] Bank of Taiwan returned status={response.status_code}")
-                return []
-        except Exception as e:
-            print(f"[fetch_bot_rates] request failed: {e}")
-            return []
-
-        target = target_currency.upper()
-        try:
-            # The BOT CSV uses UTF-8 BOM; decode defensively.
-            content = response.content.decode("utf-8-sig", errors="replace")
-            reader = csv.reader(io.StringIO(content))
-            for row in reader:
-                if not row:
-                    continue
-                # First column is like "USD(美金)" or "JPY(日圓)".
-                currency_cell = row[0].strip().upper()
-                if currency_cell.startswith(target):
-                    if len(row) >= 5:
-                        return [{
-                            "bank":      "台灣銀行",
-                            "spot_buy":  row[3].strip() if len(row) > 3 else "--",
-                            "spot_sell": row[4].strip() if len(row) > 4 else "--",
-                            "cash_buy":  row[1].strip() if len(row) > 1 else "--",
-                            "cash_sell": row[2].strip() if len(row) > 2 else "--",
-                        }]
-        except Exception as e:
-            print(f"[fetch_bot_rates] parse error: {e}")
-
-        return []
-    
     def run(self, state: Dict[str, Any]) -> Command:
         print(">>>>Currency Working<<<<")
         

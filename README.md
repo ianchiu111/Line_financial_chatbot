@@ -15,7 +15,9 @@ This project conducts a Line Chatbot to solve users' financial questions.
 <img src="images/present.png" alt="image" width="300"/>
 
 
-## Activate the chatbot in local
+## Deployment
+
+### Deploy the chatbot in local(ngrok)
 1. Terminal 1 — Flask app:
 ```bash
 python app.py
@@ -28,7 +30,9 @@ ngrok http 5001
 4. Setup Webhook URL setting in Line Developers
 `https://prisonlike-sarky-floyd.ngrok-free.dev/callback`
 
-
+### Deploy the chatbot on cloud(render)
+- Different branches have responding Webhook URL
+- Set `region` in Render as `Singapore (Southeast Asia)`
 
 # References
 
