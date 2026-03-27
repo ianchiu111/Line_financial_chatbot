@@ -4,6 +4,10 @@ This project conducts a Line Chatbot to solve users' financial questions.
 
 ## Chatbot Abilities
 
+### Message Type
+1. Text Message
+2. Audio Message
+
 ### Currency
 1. Real-time currency exchange rate
 2. Bank rate comparasion
@@ -13,6 +17,7 @@ This project conducts a Line Chatbot to solve users' financial questions.
 
 ### Present
 <img src="images/present.png" alt="image" width="300"/>
+<img src="images/audio_present.png" alt="image" width="300"/>
 
 
 ## Deployment
