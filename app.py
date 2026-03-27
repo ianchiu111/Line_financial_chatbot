@@ -220,23 +220,40 @@ def _keep_alive():
     """
     Ping the /health endpoint every 13 minutes to prevent the Render
     free-tier server from sleeping due to inactivity (sleep threshold: 15 min).
-    """
 
+    The outer loop ensures the ping loop is restarted automatically if it
+    exits due to any unexpected exception (including BaseException subclasses
+    such as SystemExit that are not caught by a plain ``except Exception``).
+    """
     base_url = os.environ.get("RENDER_EXTERNAL_URL_DEV", "")
-    ping_url = f"{base_url}health"
+    ping_url = f"{base_url.rstrip('/')}/health"
     interval = 13 * 60  # seconds
+
     while True:
         try:
-            resp = requests.get(ping_url, timeout=10)
-            logger.info(f"Keep-alive ping successful: {ping_url} [{resp.status_code}]")
-        
-        except Exception as exc:
-            logger.warning(f"Keep-alive ping failed: {exc}")
-        
-        time.sleep(interval)
+            while True:
+                try:
+                    resp = requests.get(ping_url, timeout=10)
+                    logger.info(f"Keep-alive ping successful: {ping_url} [{resp.status_code}]")
+                except Exception as exc:
+                    logger.warning(f"Keep-alive ping failed: {exc}")
 
-_keep_alive_thread = threading.Thread(target=_keep_alive, daemon=True, name="keep-alive")
-_keep_alive_thread.start()
+                time.sleep(interval)
+        except BaseException as exc:
+            logger.error(f"Keep-alive loop exited unexpectedly: {exc}. Restarting in 60 s…")
+            time.sleep(60)
+
+
+def _start_keep_alive():
+    """Start the keep-alive background thread (no-op if one is already running)."""
+    if any(t.name == "keep-alive" and t.is_alive() for t in threading.enumerate()):
+        return None
+    t = threading.Thread(target=_keep_alive, daemon=True, name="keep-alive")
+    t.start()
+    return t
+
+
+_keep_alive_thread = _start_keep_alive()
 
 
 if __name__ == "__main__":
