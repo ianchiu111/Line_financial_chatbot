@@ -137,11 +137,13 @@ def handle_message(event):
     if taiwan_bank_rates != []:            
 
         try:
+            updated_time_taiwan = datetime.now(taiwan_tz)
+
             taiwan_bank_rates_table = build_bank_rate_table(
                 rates = taiwan_bank_rates, 
                 _FROM_currency = _FROM_currency,
                 _TO_currency = _TO_currency, 
-                updated = current_time_taiwan.strftime("%Y-%m/%d-%H:%M")
+                updated = updated_time_taiwan.strftime("%Y-%m/%d-%H:%M")
             )
             messages.append(taiwan_bank_rates_table)
         except Exception as e:
