@@ -211,27 +211,27 @@ def ask_agent():
 def health():
     return {"status": f"server is running {version}"}
 
-
 # ====================================================
 # Keep-Alive: prevent Render free-tier from sleeping
 # ====================================================
 def _keep_alive():
-    """Ping the /health endpoint every 14 minutes to prevent the Render
-    free-tier server from sleeping due to inactivity (sleep threshold: 15 min)."""
-    base_url = os.environ.get("RENDER_EXTERNAL_URL", "").rstrip("/")
-    if not base_url:
-        logger.warning("RENDER_EXTERNAL_URL is not set; keep-alive ping is disabled.")
-        return
-    ping_url = f"{base_url}/health"
-    interval = 14 * 60  # seconds
+    """
+    Ping the /health endpoint every 13 minutes to prevent the Render
+    free-tier server from sleeping due to inactivity (sleep threshold: 15 min).
+    """
+
+    base_url = os.environ.get("RENDER_EXTERNAL_URL_DEV", "")
+    ping_url = f"{base_url}health"
+    interval = 13 * 60  # seconds
     while True:
         try:
             resp = requests.get(ping_url, timeout=10)
-            logger.info(f"Keep-alive ping → {ping_url} [{resp.status_code}]")
+            logger.info(f"Keep-alive ping successful: {ping_url} [{resp.status_code}]")
+        
         except Exception as exc:
             logger.warning(f"Keep-alive ping failed: {exc}")
+        
         time.sleep(interval)
-
 
 _keep_alive_thread = threading.Thread(target=_keep_alive, daemon=True, name="keep-alive")
 _keep_alive_thread.start()
