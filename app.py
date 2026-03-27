@@ -1,3 +1,4 @@
+import io
 import os
 import time
 import threading
@@ -12,6 +13,7 @@ from utils.CSS.flex_bank_table import build_bank_rate_table
 from typing import Dict, Any, Optional
 from pathlib import Path
 from graph import run_agent
+from utils.Audio.speech_to_text import transcribe_audio
 
 ## Line Chatbot
 from flask import Flask, request, jsonify, abort
@@ -23,11 +25,14 @@ from linebot.v3.messaging import (
     ApiClient,
     MessagingApi,
     ReplyMessageRequest,
-    TextMessage
+    TextMessage,
+    MessagingApiBlob,
+    AudioMessage
 )
 from linebot.v3.webhooks import (
     MessageEvent,
-    TextMessageContent
+    TextMessageContent,
+    AudioMessageContent
 )
 from dotenv import load_dotenv
 load_dotenv(".env")
@@ -110,7 +115,9 @@ def callback():
 
 @handler.add(MessageEvent, message=TextMessageContent)
 def handle_message(event):
-    """Handle incoming text messages from LINE users"""
+    """
+    Handle incoming text messages from LINE users
+    """
     user_message = event.message.text
     logger.info(f"User message: {user_message}")
  
@@ -160,6 +167,98 @@ def handle_message(event):
                 )
             return
  
+    # ── Reply ─────────────────────────────────────────────────────────────────
+    # Line allows max 5 messages per reply
+    messages = messages[:5]
+
+    with ApiClient(configuration) as api_client:
+        line_bot_api = MessagingApi(api_client)
+        line_bot_api.reply_message_with_http_info(
+            ReplyMessageRequest(
+                reply_token=event.reply_token,
+                messages=messages,
+            )
+        )
+
+
+@handler.add(MessageEvent, message=AudioMessageContent)
+def handle_audio_message(event):
+    """
+    Handle incoming audio/voice messages from LINE users
+    """
+    
+    message_id = event.message.id
+    logger.info(f"Audio message received. Message ID: {message_id}")
+
+    # ── Download the audio blob from LINE ──────────────────────────
+    try:
+        with ApiClient(configuration) as api_client:
+            line_bot_blob_api = MessagingApiBlob(api_client)  # different client!
+            
+            # audio_content is raw bytes in M4A format
+            audio_content = line_bot_blob_api.get_message_content(message_id=message_id)
+            audio_bytes = io.BytesIO(audio_content)
+
+    except Exception as e:
+        logger.error(f"Failed to download audio: {e}")
+        logger.error(traceback.format_exc())
+        return
+
+    # ── Speech-to-Text ─────────────────────────────────────────────
+    try:
+        user_message = transcribe_audio(audio_bytes)
+        logger.info(f"Transcribed text: {user_message}")
+    except Exception as e:
+        logger.error(f"Transcription failed: {e}")
+        logger.error(traceback.format_exc())
+        return
+
+    # ── Agent Response ────────────────────────────────────────────────────
+    try:
+        agent_response, taiwan_bank_rates, _FROM_currency, _TO_currency = run_agent(query=user_message)
+        messages = [TextMessage(text=str(agent_response))]
+
+    except Exception as e:
+        logger.error(f"Agent error: {e}")
+        logger.error(traceback.format_exc())
+
+        with ApiClient(configuration) as api_client:
+            line_bot_api = MessagingApi(api_client)
+            line_bot_api.reply_message_with_http_info(
+                ReplyMessageRequest(
+                    reply_token=event.reply_token,
+                    messages=[TextMessage(text="Sorry, agent response went wrong. Please access our engineer.")]
+                )
+            )
+        return
+ 
+    # ── Rate Table Response ────────────────────────────────────────────────────
+    if taiwan_bank_rates != []:            
+
+        try:
+            updated_time_taiwan = datetime.now(taiwan_tz)
+
+            taiwan_bank_rates_table = build_bank_rate_table(
+                rates = taiwan_bank_rates, 
+                _FROM_currency = _FROM_currency,
+                _TO_currency = _TO_currency, 
+                updated = updated_time_taiwan.strftime("%Y-%m/%d-%H:%M")
+            )
+            messages.append(taiwan_bank_rates_table)
+        except Exception as e:
+            logger.error(f"Table error: {e}")
+            logger.error(traceback.format_exc())
+
+            with ApiClient(configuration) as api_client:
+                line_bot_api = MessagingApi(api_client)
+                line_bot_api.reply_message_with_http_info(
+                    ReplyMessageRequest(
+                        reply_token=event.reply_token,
+                        messages=[TextMessage(text="Sorry, table building went wrong. Please access our engineer.")]
+                    )
+                )
+            return
+
     # ── Reply ─────────────────────────────────────────────────────────────────
     # Line allows max 5 messages per reply
     messages = messages[:5]

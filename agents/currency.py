@@ -217,6 +217,8 @@ class CurrencyAgent(BaseAgent):
                     target_currency = from_currency
 
                 taiwan_bank_rates = self.fetch_taiwan_bank_rates(target_currency=target_currency)
+        else:
+            taiwan_bank_rates = []
 
         exchange_rate_info = self.fetch_exchange_rate(from_currency, to_currency)
         
