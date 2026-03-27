@@ -217,23 +217,20 @@ def health():
 # Keep-Alive: prevent Render free-tier from sleeping
 # ====================================================
 def _keep_alive():
-    """
-    Ping the /health endpoint every 13 minutes to prevent the Render
-    free-tier server from sleeping due to inactivity (sleep threshold: 15 min).
-    """
+    base_url = os.environ.get("RENDER_EXTERNAL_URL_DEV", "").strip()
 
-    base_url = os.environ.get("RENDER_EXTERNAL_URL_DEV", "")
-    ping_url = f"{base_url}health"
+    ping_url = f"{base_url.rstrip('/')}/health"
+    logger.info(f" ping_url: {ping_url}")
     interval = 13 * 60  # seconds
+
     while True:
         try:
             resp = requests.get(ping_url, timeout=10)
             logger.info(f"Keep-alive ping successful: {ping_url} [{resp.status_code}]")
-        
         except Exception as exc:
-            logger.warning(f"Keep-alive ping failed: {exc}")
-        
-        time.sleep(interval)
+            logger.error(f"Keep-alive ping failed: {exc}")
+        finally:
+            time.sleep(interval)  # Always sleep, whether ping succeeded or failed
 
 _keep_alive_thread = threading.Thread(target=_keep_alive, daemon=True, name="keep-alive")
 _keep_alive_thread.start()
