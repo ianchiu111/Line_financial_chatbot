@@ -65,6 +65,130 @@ class CurrencyAgent(BaseAgent):
                 print(f"無法找到 json object, Origin Content: {text}")
                 return {}
 
+    def fetch_currency_history(
+        self, from_currency: str, to_currency: str, days: int = 7
+    ) -> str:
+        """
+        Fetch historical exchange rate statistics for the past N days.
+
+        Args:
+            from_currency: Base currency code (e.g. "USD")
+            to_currency:   Target currency code (e.g. "TWD")
+            days:          Number of calendar days to look back (default 7)
+
+        Returns:
+            Formatted string with current rate, period high/low, and % change.
+        """
+        from_currency = from_currency.upper()
+        to_currency = to_currency.upper()
+        ticker_symbol = f"{from_currency}{to_currency}=X"
+
+        try:
+            ticker = yf.Ticker(ticker_symbol)
+            hist = ticker.history(period=f"{days}d")
+
+            if hist.empty:
+                raise ValueError(
+                    f"[NO_DATA] No historical data for '{ticker_symbol}'. "
+                    "The pair may be unsupported or the period too short."
+                )
+
+            current = float(hist["Close"].iloc[-1])
+            period_high = float(hist["High"].max())
+            period_low = float(hist["Low"].min())
+            start_price = float(hist["Close"].iloc[0])
+            change_pct = ((current - start_price) / start_price) * 100
+            trend = "📈 上漲" if change_pct > 0 else "📉 下跌" if change_pct < 0 else "➡ 持平"
+            sign = "+" if change_pct >= 0 else ""
+
+            lines = [f"\n📊 {from_currency}/{to_currency} 近 {days} 天匯率走勢"]
+            lines.append(f"目前匯率：{current:.4f}")
+            lines.append(f"區間最高：{period_high:.4f}")
+            lines.append(f"區間最低：{period_low:.4f}")
+            lines.append(f"{days} 天漲跌：{sign}{change_pct:.2f}%（{trend}）")
+
+            return "\n".join(lines)
+
+        except ValueError:
+            raise
+        except Exception as e:
+            raise RuntimeError(
+                f"[HISTORY_FETCH_FAILED] Failed to fetch history for '{ticker_symbol}'.\n"
+                f"  Reason: {e}"
+            ) from e
+
+    def calculate_best_exchange_amount(
+        self,
+        amount: float,
+        from_currency: str,
+        to_currency: str,
+        bank_rates: list,
+    ) -> str:
+        """
+        Given a specific amount to exchange, rank Taiwan banks by best deal.
+
+        The comparison uses spot rates where available, falling back to cash rates.
+        If buying foreign currency (from_currency == TWD) the bank's sell rate is used;
+        if selling foreign currency (to_currency == TWD) the bank's buy rate is used.
+
+        Args:
+            amount:        Amount in from_currency to exchange.
+            from_currency: Source currency code.
+            to_currency:   Target currency code.
+            bank_rates:    List of bank rate dicts from fetch_taiwan_bank_rates().
+
+        Returns:
+            Formatted string ranking up to 5 banks by converted amount received.
+        """
+        if not bank_rates:
+            return "⚠️ 目前無法取得銀行匯率資料，無法試算。"
+
+        buying_foreign = from_currency.upper() == "TWD"  # customer buys foreign with TWD
+        results = []
+
+        for bank in bank_rates:
+            bank_name = bank.get("bank", "Unknown")
+
+            if buying_foreign:
+                # Customer pays TWD → bank sells foreign → use bank's sell rate
+                rate_str = bank.get("spot_sell") or bank.get("cash_sell", "--")
+            else:
+                # Customer pays foreign → bank buys foreign → use bank's buy rate
+                rate_str = bank.get("spot_buy") or bank.get("cash_buy", "--")
+
+            if not rate_str or rate_str == "--":
+                continue
+
+            try:
+                rate = float(rate_str)
+                if rate <= 0:
+                    continue
+                converted = amount / rate if buying_foreign else amount * rate
+                results.append(
+                    {"bank": bank_name, "rate": rate, "converted": converted}
+                )
+            except (ValueError, ZeroDivisionError):
+                continue
+
+        if not results:
+            return "⚠️ 無有效銀行利率可供試算。"
+
+        # Higher converted amount is always better for the customer
+        results.sort(key=lambda x: x["converted"], reverse=True)
+
+        lines = [f"\n💱 {amount:,.0f} {from_currency} → {to_currency} 各銀行試算"]
+        medals = ["🥇", "🥈", "🥉"]
+        for i, r in enumerate(results[:5]):
+            # Strip branch code "(NNN)" appended by the data source
+            bank_short = re.sub(r"\(\d+\)", "", r["bank"]).strip()
+            prefix = medals[i] if i < 3 else f"{i + 1}."
+            lines.append(
+                f"{prefix} {bank_short}：{r['converted']:,.2f} {to_currency}"
+                f"（匯率 {r['rate']}）"
+            )
+
+        return "\n".join(lines)
+
     def fetch_exchange_rate(self, from_currency: str, to_currency: str) -> str:
         """
         Fetch exchange rate between any two currencies.
@@ -199,30 +323,66 @@ class CurrencyAgent(BaseAgent):
 
     def run(self, state: Dict[str, Any]) -> Command:
         print(">>>>Currency Working<<<<")
-        
+
+        objectives = state.get("objective", [])
         from_currency = state.get("_FROM_currency", "")
         to_currency = state.get("_TO_currency", "")
-        
-        SUPPORTED_CURRENCIES = [
+
+        SUPPORTED_BANK_RATE_CURRENCIES = [
             "TWD", "USD", "EUR", "JPY", "GBP", "AUD",
             "CAD", "HKD", "CNY", "NZD", "ZAR",
         ]
 
-        # Use Taiwan bank rates if converting to TWD
-        if "TWD" in (from_currency, to_currency):
-            if from_currency in SUPPORTED_CURRENCIES and to_currency.upper() in SUPPORTED_CURRENCIES:
-                if from_currency == "TWD":
-                    target_currency = to_currency
-                else:
-                    target_currency = from_currency
-
-                taiwan_bank_rates = self.fetch_taiwan_bank_rates(target_currency=target_currency)
-
-        exchange_rate_info = self.fetch_exchange_rate(from_currency, to_currency)
-        
-        update = {
-            "exchange_rate_info": exchange_rate_info,
-            "taiwan_bank_rates": taiwan_bank_rates
+        update: Dict[str, Any] = {
+            "exchange_rate_info": "",
+            "taiwan_bank_rates": [],
+            "currency_history_info": "",
+            "best_exchange_info": "",
         }
+
+        # ── Feature: historical rate trend ────────────────────────────────────
+        if "currency_history" in objectives:
+            history_days = state.get("history_days", 7)
+            try:
+                update["currency_history_info"] = self.fetch_currency_history(
+                    from_currency, to_currency, days=history_days
+                )
+            except Exception as e:
+                update["currency_history_info"] = f"⚠️ 無法取得歷史匯率資料：{e}"
+
+        # ── Feature: real-time rate + bank comparison ─────────────────────────
+        if "currency_exchange_rate" in objectives or "currency_best_amount" in objectives:
+            try:
+                update["exchange_rate_info"] = self.fetch_exchange_rate(
+                    from_currency, to_currency
+                )
+            except Exception as e:
+                update["exchange_rate_info"] = f"⚠️ 無法取得即時匯率：{e}"
+
+            # Fetch Taiwan bank rates when TWD is involved and currency is supported
+            involves_twd = "TWD" in (from_currency.upper(), to_currency.upper())
+            both_supported = (
+                from_currency.upper() in SUPPORTED_BANK_RATE_CURRENCIES
+                and to_currency.upper() in SUPPORTED_BANK_RATE_CURRENCIES
+            )
+            if involves_twd and both_supported:
+                target_currency = (
+                    to_currency if from_currency.upper() == "TWD" else from_currency
+                )
+                taiwan_bank_rates = self.fetch_taiwan_bank_rates(
+                    target_currency=target_currency
+                )
+                update["taiwan_bank_rates"] = taiwan_bank_rates
+
+                # ── Feature: best exchange amount calculator ───────────────────
+                if "currency_best_amount" in objectives:
+                    amount = float(state.get("amount_to_exchange") or 0)
+                    if amount > 0:
+                        update["best_exchange_info"] = (
+                            self.calculate_best_exchange_amount(
+                                amount, from_currency, to_currency, taiwan_bank_rates
+                            )
+                        )
+
         return Command(update=update)
     

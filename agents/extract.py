@@ -33,17 +33,36 @@ class ExtractAgent(BaseAgent):
 
     def run(self, state: Dict[str, Any]) -> Command:
         print(">>>>Extract Working<<<<")
-        prompt = get_extractAgent_prompt(origin_query = state.get("origin_query", ""))
+        prompt = get_extractAgent_prompt(
+            origin_query=state.get("origin_query", ""),
+            objective=state.get("objective", []),
+        )
         response = self.llm.invoke([HumanMessage(content=prompt)])
 
         content = self._safe_parse_json(response.content)
         _FROM_currency = content.get("_FROM_currency", "unknown")
         _TO_currency = content.get("_TO_currency", "unknown")
 
+        # New fields — default safely if absent or wrong type
+        try:
+            amount_to_exchange = float(content.get("amount_to_exchange") or 0)
+        except (TypeError, ValueError):
+            amount_to_exchange = 0.0
+
+        try:
+            history_days = int(content.get("history_days") or 7)
+        except (TypeError, ValueError):
+            history_days = 7
+
+        stock_ticker = str(content.get("stock_ticker") or "").strip()
 
         update = {
             "_FROM_currency": _FROM_currency,
             "_TO_currency": _TO_currency,
+            "amount_to_exchange": amount_to_exchange,
+            "history_days": history_days,
+            "stock_ticker": stock_ticker,
         }
         return Command(update=update)
+
     

@@ -34,9 +34,12 @@ class SummaryAgent(BaseAgent):
     def run(self, state: Dict[str, Any]) -> Command:
         print(">>>>Summary Working<<<<")
         prompt = get_summaryAgent_prompt(
-            origin_query = state.get("origin_query", ""),
-            objective = state.get("objective", []),
-            exchange_rate_info = state.get("exchange_rate_info", ""),
+            origin_query=state.get("origin_query", ""),
+            objective=state.get("objective", []),
+            exchange_rate_info=state.get("exchange_rate_info", ""),
+            currency_history_info=state.get("currency_history_info", ""),
+            best_exchange_info=state.get("best_exchange_info", ""),
+            stock_info=state.get("stock_info", ""),
         )
         response = self.llm.invoke([HumanMessage(content=prompt)])
 
@@ -48,3 +51,4 @@ class SummaryAgent(BaseAgent):
             "response": content or "",
         }
         return Command(update=update)
+

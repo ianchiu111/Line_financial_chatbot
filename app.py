@@ -191,7 +191,7 @@ def ask_agent():
                 )
             )
         
-        response, taiwan_bank_rates = run_agent(query = query)
+        response, taiwan_bank_rates, _FROM_currency, _TO_currency = run_agent(query=query)
         return jsonify(
             APIResponse.success(
                 message=(taiwan_bank_rates, response),
