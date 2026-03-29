@@ -1,21 +1,16 @@
-
 import json, re
-from typing import Dict, Any
+from typing import Dict, Any, List
 
 from langchain_core.messages import HumanMessage
 from langgraph.types import Command
-from agents.base import BaseAgent
-from agents.prompts import get_summaryAgent_prompt
 
-class SummaryAgent(BaseAgent):
+from agents.base import BaseAgent
+
+from utils.RAG.ask_financail_question import ask_question
+
+class TermExplanationAgent(BaseAgent):
     def __init__(self, llm_client=None):
         self.llm = llm_client.llm
-
-    def _stringify(self, obj: Any) -> str:
-        """Pretty-print dict / list, otherwise str()."""
-        if isinstance(obj, (dict, list)):
-            return json.dumps(obj, ensure_ascii=False, indent=2)
-        return str(obj)
 
     def _safe_parse_json(self, text: str) -> dict:
         if isinstance(text, dict):
@@ -38,20 +33,22 @@ class SummaryAgent(BaseAgent):
                 return {}
 
     def run(self, state: Dict[str, Any]) -> Command:
-        print(">>>>Summary Working<<<<")
-        prompt = get_summaryAgent_prompt(
-            origin_query = state.get("origin_query", ""),
-            objective = state.get("objective", []),
-            exchange_rate_info = state.get("exchange_rate_info", ""),
-            financial_term_answers = self._stringify(state.get("financial_term_answers", {}))
-        )
-        response = self.llm.invoke([HumanMessage(content=prompt)])
+        print(">>>>Term Explanation Working<<<<")
 
-        # content = self._safe_parse_json(response.content)
-        content = response.content
-        print(f"content: {content}")
+        question_list : List[str] = state.get("financial_term_questions")
+        answer_list : Dict[str, str] = {}
+
+        for question in question_list:
+            result = ask_question(question)
+            print("=" * 80)
+            print("Financial Question:", question)
+            print("RAG Response:")
+            print(result)
+            print("=" * 80)
+
+            answer_list[question] = result
 
         update = {
-            "response": content or "",
+            "financial_term_answers": answer_list,
         }
         return Command(update=update)

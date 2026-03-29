@@ -36,13 +36,12 @@ class IntentAgent(BaseAgent):
         print(">>>>Intent Working<<<<")
         prompt = get_intentAgent_prompt(origin_query = state.get("origin_query", ""))
         response = self.llm.invoke([HumanMessage(content=prompt)])
-
         content = self._safe_parse_json(response.content)
-        print(f"content: {content}")
 
         objective = content.get("objective", [])
 
         update = {
+            "original_objective": objective.copy(), # Make sure to use .copy() in original_objective  to prevent removing in router
             "objective": objective,
         }
         return Command(update=update)

@@ -124,3 +124,6 @@ evaluation_results/
 *test.ipynb
 *.zip
 *.ipynb
+
+# project files
+knowledge_files/

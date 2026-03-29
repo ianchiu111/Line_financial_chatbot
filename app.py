@@ -123,8 +123,13 @@ def handle_message(event):
  
     # ── Agent Response ────────────────────────────────────────────────────
     try:
-        agent_response, taiwan_bank_rates, _FROM_currency, _TO_currency = run_agent(query=user_message)
-        messages = [TextMessage(text=str(agent_response))]
+        result = run_agent(query=user_message)
+        response = result.get("response", "")
+        taiwan_bank_rates = result.get("taiwan_bank_rates", [])
+        _FROM_currency = result.get("_FROM_currency", [])
+        _TO_currency = result.get("_TO_currency", [])
+
+        messages = [TextMessage(text=str(response))]
 
     except Exception as e:
         logger.error(f"Agent error: {e}")
@@ -215,8 +220,13 @@ def handle_audio_message(event):
 
     # ── Agent Response ────────────────────────────────────────────────────
     try:
-        agent_response, taiwan_bank_rates, _FROM_currency, _TO_currency = run_agent(query=user_message)
-        messages = [TextMessage(text=str(agent_response))]
+        result = run_agent(query=user_message)
+        response = result.get("response", "")
+        taiwan_bank_rates = result.get("taiwan_bank_rates", [])
+        _FROM_currency = result.get("_FROM_currency", [])
+        _TO_currency = result.get("_TO_currency", [])
+
+        messages = [TextMessage(text=str(response))]
 
     except Exception as e:
         logger.error(f"Agent error: {e}")
@@ -292,10 +302,13 @@ def ask_agent():
                 )
             )
         
-        response, taiwan_bank_rates = run_agent(query = query)
+        # ── Agent Response ────────────────────────────────────────────────────
+        result = run_agent(query = query)
+        response = result.get("response", "")
+
         return jsonify(
             APIResponse.success(
-                message=(taiwan_bank_rates, response),
+                message=(response),
             )
         )
     except Exception as e:
